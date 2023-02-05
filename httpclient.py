@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # coding: utf-8
-# Copyright 2016 Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust
+
+#httpclient.py contains contribution from: 
+#Harsh Patel
+# Copyright 2016 Abram Hindle,https://github.com/tywtyw2002, and https://github.com/treedust
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +36,23 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    def get_host_port(self,url):
+        url = urllib.parse.urlparse(url)
+        port = url.port
+
+        if port is None:
+            port = 80
+        
+        host = url.hostname
+
+        return host, port
+    
+    def get_path(self,url):
+        url = urllib.parse.urlparse(url)
+        path = url.path
+        if not path:
+            return "/"
+        return path
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,17 +60,20 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return None
+        status_code = int(data.split()[1])
+        return status_code
 
-    def get_headers(self,data):
-        return None
+    def get_headers(self, data):
+        header = data.split('\r\n\r\n')[0]
+        return header
 
     def get_body(self, data):
-        return None
-    
+        body = data.split('\r\n\r\n')[1]
+        return body
+
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
-        
+
     def close(self):
         self.socket.close()
 
@@ -70,11 +92,62 @@ class HTTPClient(object):
     def GET(self, url, args=None):
         code = 500
         body = ""
+
+        host,port = self.get_host_port(url)
+        path = self.get_path(url)
+
+        #establishing connection
+        try:
+            self.connect(host, port)
+        except:
+            return HTTPResponse(404)
+        
+        result_url = f'GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n'
+        self.sendall(result_url)
+
+        read_data = (self.recvall(self.socket))
+        
+        code = self.get_code(read_data)
+        body = self.get_body(read_data)
+        
+        #print(code)
+        #print(body)
+
+        self.close()
+
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
         code = 500
         body = ""
+
+        host,port = self.get_host_port(url)
+        path = self.get_path(url)
+            
+        #establishing connection
+        try:
+            self.connect(host, port)
+        except:
+            return HTTPResponse(404)
+
+        if not args:
+            args = "" 
+        else:
+            args = urllib.parse.urlencode(args)
+
+        result_url = f'POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {(len(args))}\r\nConnection: close\r\n\r\n{args}'
+        self.sendall(result_url)
+
+        read_data = (self.recvall(self.socket))
+          
+        code = self.get_code(read_data)
+        body = self.get_body(read_data)
+        
+        #print(code)
+        #print(body)
+
+        self.close()
+
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
